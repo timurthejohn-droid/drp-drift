@@ -1,5 +1,5 @@
-// Расшифровка сайта DRP на лету. Версия выкладки 20261124183818
-const BASE = "/drp-drift/", V = "20261124183818";
+// Расшифровка сайта DRP на лету. Версия выкладки 20261124190203
+const BASE = "/drp-drift/", V = "20261124190203";
 const PASS = /^(sw\.js|x\/|robots\.txt|404\.html|\.nojekyll)$|^x\//;
 let K = null, M = null;
 self.addEventListener('install', () => self.skipWaiting());
