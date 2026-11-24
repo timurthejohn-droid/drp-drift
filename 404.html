@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+<meta name="googlebot" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+<meta name="yandex" content="noindex,nofollow,noarchive">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#FFFFFF">
+<title>DRP</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#FFFFFF;color:#242424;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Inter,Roboto,Arial,sans-serif;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{width:100%;max-width:360px;text-align:center}
+.k{font-size:11px;font-weight:700;letter-spacing:.2em;color:#E17331;text-transform:uppercase}
+h1{font-size:32px;line-height:.95;font-weight:900;letter-spacing:-.02em;text-transform:uppercase;margin:12px 0 10px}
+h1 span{color:#E17331}
+.sub{color:#6E6A63;font-size:13px;margin-bottom:28px}
+form{display:flex;flex-direction:column;gap:12px}
+input{background:#fff;border:1px solid #BDBDBD;border-radius:4px;padding:15px 16px;color:#242424;font-size:16px;text-align:center;letter-spacing:.06em}
+input:focus{outline:none;border-color:#E17331}
+button{background:#E17331;color:#fff;border:none;border-radius:4px;height:54px;font-size:14px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+button:disabled{opacity:.55}
+.err{color:#B00000;font-size:13px;margin-top:14px;min-height:18px}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="k">Прототип сайта</div>
+  <h1>Drift Racing <span>Park</span></h1>
+  <div class="sub">Доступ по паролю</div>
+  <form id="f">
+    <input type="password" id="pw" placeholder="Пароль" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button type="submit" id="btn">Войти</button>
+  </form>
+  <div class="err" id="err"></div>
+</div>
+<script>
+const BASE = "/drp-drift/", SALT = "ox0VDiRahrNatCOqCcsZCw==", ITER = 250000;
+const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const $ = (id) => document.getElementById(id), err = $('err'), btn = $('btn');
+function db(mode, fn) {
+  return new Promise((ok, no) => {
+    const r = indexedDB.open('drp-gate', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onerror = () => no(r.error);
+    r.onsuccess = () => { const tx = r.result.transaction('kv', mode), q = fn(tx.objectStore('kv')); tx.oncomplete = () => ok(q && q.result); tx.onerror = () => no(tx.error); };
+  });
+}
+async function derive(pw) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64d(SALT), iterations: ITER, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+}
+async function check(key) {
+  const r = await fetch(BASE + 'x/m.bin', { cache: 'no-cache' });
+  const u = new Uint8Array(await r.arrayBuffer());
+  await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, key, u.slice(12));
+}
+async function enter(key) {
+  await db('readwrite', (s) => s.put({ key, exp: Date.now() + 30 * 864e5 }, 'k'));
+  await navigator.serviceWorker.register(BASE + 'sw.js', { scope: BASE });
+  await navigator.serviceWorker.ready;
+  if (!navigator.serviceWorker.controller) await new Promise((r) => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 4000); });
+  // защита от зацикливания: не больше двух автоперезагрузок за 20 секунд
+  const n = +(sessionStorage.getItem('drp_gate_n') || 0), t = +(sessionStorage.getItem('drp_gate_t') || 0);
+  if (Date.now() - t < 20000 && n >= 2) { err.textContent = 'Не удалось открыть сайт. Обновите страницу'; btn.disabled = false; return; }
+  sessionStorage.setItem('drp_gate_n', Date.now() - t < 20000 ? n + 1 : 1); sessionStorage.setItem('drp_gate_t', Date.now());
+  location.reload();
+}
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault(); btn.disabled = true; err.textContent = 'Открываю…';
+  try { const key = await derive($('pw').value); await check(key); await enter(key); }
+  catch (ex) { err.textContent = 'Неверный пароль'; btn.disabled = false; }
+});
+(async () => {
+  if (!('serviceWorker' in navigator) || !window.crypto || !crypto.subtle || !window.indexedDB) {
+    err.textContent = 'Этот браузер не открывает защищенные страницы. Откройте ссылку в обычном окне Chrome или Safari'; btn.disabled = true; return;
+  }
+  try {
+    const v = await db('readonly', (s) => s.get('k'));
+    if (v && v.exp > Date.now()) { await check(v.key); await enter(v.key); return; }
+    if (v) await db('readwrite', (s) => s.delete('k'));
+  } catch (ex) { try { await db('readwrite', (s) => s.delete('k')); } catch (e2) {} }
+})();
+</script>
+</body></html>
