@@ -51,7 +51,7 @@ async function derive(pw) {
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64d(SALT), iterations: ITER, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
 }
 async function check(key) {
-  const r = await fetch(BASE + 'x/m.bin', { cache: 'no-cache' });
+  const r = await fetch(BASE + 'x/m.bin?t=' + Date.now(), { cache: 'no-store' });
   const u = new Uint8Array(await r.arrayBuffer());
   await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, key, u.slice(12));
 }
